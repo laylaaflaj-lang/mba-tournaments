@@ -1,6 +1,5 @@
-
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
-import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signInWithPopup,GoogleAuthProvider,signOut,linkWithPopup,sendPasswordResetEmail} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
+import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signInWithPopup,GoogleAuthProvider,signOut,linkWithPopup,linkWithCredential,EmailAuthProvider,sendPasswordResetEmail} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
 import {getDatabase,ref,onValue,set,push,update,remove} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js';
 
 const firebaseConfig={
@@ -161,10 +160,39 @@ function adminView(){
 }
 function authView(){
   const b=$('#authButtons'),a=$('#authState');
-  if(!user){a.textContent='Public viewer · Login for editing';b.innerHTML='<button id="emailLogin">Email Login</button><button id="googleLogin">Google Login</button>';return}
+  if(!user){
+    a.textContent='Public viewer · Login for editing';
+    b.innerHTML=`<button type="button" id="emailLogin">Email / Password</button><button type="button" id="googleLogin">Google Login</button>
+      <form id="mbaEmailForm" style="display:none;margin-top:12px;max-width:330px" autocomplete="on">
+        <label>Email<input id="mbaSignInEmail" type="email" autocomplete="email" required></label>
+        <label>Password<input id="mbaSignInPassword" type="password" autocomplete="current-password" required></label>
+        <button type="submit">Sign in</button><button type="button" id="mbaForgotPassword">Forgot password?</button>
+        <p id="mbaEmailMessage" role="status" class="muted" aria-live="polite"></p>
+      </form>`;
+    return;
+  }
   a.textContent=`${user.email||'Signed in'} · ${myRole()?.role||'Viewer (no admin permission)'}`;
-  b.innerHTML=`${user.providerData.some(p=>p.providerId==='google.com')?'':'<button id="linkGoogle">Link Google Login</button>'}<button id="logout">Logout</button>`;
+  const hasGoogle=user.providerData.some(p=>p.providerId==='google.com');
+  const hasPassword=user.providerData.some(p=>p.providerId==='password');
+  b.innerHTML=`${user.email&&!hasPassword?`<button type="button" id="linkPassword">Set app password</button>
+    <form id="mbaLinkPasswordForm" style="display:none;margin-top:12px;max-width:350px">
+      <p class="muted">Add a separate app password to this existing account (not your Google password).</p>
+      <label>New password<input id="mbaNewPassword" type="password" autocomplete="new-password" minlength="12" required></label>
+      <label>Confirm password<input id="mbaConfirmPassword" type="password" autocomplete="new-password" minlength="12" required></label>
+      <button type="submit">Link password login</button>
+      <p id="mbaLinkMessage" role="status" class="muted" aria-live="polite"></p>
+    </form>`:'<span class="muted">Password login enabled</span>'}
+    ${hasGoogle?'':'<button type="button" id="linkGoogle">Link Google Login</button>'}
+    <button type="button" id="logout">Logout</button>`;
 }
+function authErrorText(e){
+  if(e?.code==='auth/requires-recent-login')return 'For security, sign out and sign back in with Google, then retry.';
+  if(e?.code==='auth/credential-already-in-use'||e?.code==='auth/email-already-in-use')return 'These credentials belong to another account. Do not create another user.';
+  if(e?.code==='auth/weak-password')return 'Choose a stronger password.';
+  if(e?.code==='auth/invalid-credential')return 'Email/password not recognized. Confirm that an app password has been set.';
+  return e?.code ? 'Operation failed: '+e.code : 'Operation failed. Please retry.';
+}
+
 function render(){
   authView();
   let keys=Object.entries(tournaments).sort((a,b)=>(b[1].date||'').localeCompare(a[1].date||''));
@@ -205,7 +233,48 @@ function bind(){
   $('#tournamentSelect')?.addEventListener('change',e=>{tid=e.target.value;editingMatchId=null;render()});
   document.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>{tid=b.dataset.open;editingMatchId=null;tab='matches';render()});
   $('#print')?.addEventListener('click',()=>window.print());
-  $('#emailLogin')?.addEventListener('click',async()=>{const email=prompt('Email address');if(!email)return;const password=prompt('Password (do not share)');if(password===null)return;try{await signInWithEmailAndPassword(auth,email,password)}catch(e){alert(e.message)}});
+  $('#emailLogin')?.addEventListener('click',()=>{
+    const f=$('#mbaEmailForm');if(!f)return;
+    f.style.display=f.style.display==='none'?'block':'none';
+    if(f.style.display==='block')$('#mbaSignInEmail')?.focus();
+  });
+  $('#mbaEmailForm')?.addEventListener('submit',async e=>{
+    e.preventDefault();
+    const email=$('#mbaSignInEmail').value.trim(),password=$('#mbaSignInPassword').value,msg=$('#mbaEmailMessage');
+    msg.textContent='Signing in…';
+    try{await signInWithEmailAndPassword(auth,email,password);msg.textContent=''}
+    catch(err){msg.textContent=authErrorText(err)}
+  });
+  $('#mbaForgotPassword')?.addEventListener('click',async()=>{
+    const email=$('#mbaSignInEmail')?.value.trim(),msg=$('#mbaEmailMessage');
+    if(!email){msg.textContent='Enter your email first.';return}
+    try{await sendPasswordResetEmail(auth,email);msg.textContent='If password sign-in is available for this email, follow the reset email instructions.'}
+    catch(err){msg.textContent=authErrorText(err)}
+  });
+  $('#linkPassword')?.addEventListener('click',()=>{
+    const f=$('#mbaLinkPasswordForm');if(!f)return;
+    f.style.display=f.style.display==='none'?'block':'none';
+    if(f.style.display==='block')$('#mbaNewPassword')?.focus();
+  });
+  $('#mbaLinkPasswordForm')?.addEventListener('submit',async e=>{
+    e.preventDefault();
+    const msg=$('#mbaLinkMessage'),p=$('#mbaNewPassword').value,q=$('#mbaConfirmPassword').value;
+    if(!user||!user.email){msg.textContent='Sign in with your Google account first.';return}
+    if(p!==q){msg.textContent='The passwords do not match.';return}
+    if(p.length<12){msg.textContent='Choose a password with at least 12 characters.';return}
+    const btn=e.currentTarget.querySelector('button[type=submit]');
+    btn.disabled=true;msg.textContent='Linking to your existing account…';
+    try{
+      const before=user.uid;
+      const credential=EmailAuthProvider.credential(user.email,p);
+      const linked=await linkWithCredential(user,credential);
+      if(linked.user.uid!==before)throw Error('Account ID changed unexpectedly');
+      $('#mbaNewPassword').value='';$('#mbaConfirmPassword').value='';
+      alert('App password linked successfully. Your account ID is unchanged.');
+      render();
+    }catch(err){msg.textContent=authErrorText(err)}
+    finally{btn.disabled=false}
+  });
   $('#googleLogin')?.addEventListener('click',async()=>{try{await signInWithPopup(auth,new GoogleAuthProvider())}catch(e){alert(e.message)}});
   $('#linkGoogle')?.addEventListener('click',async()=>{if(!confirm('Link this Google account to your current Email/Password login? Use the SAME Gmail address.'))return;try{await linkWithPopup(user,new GoogleAuthProvider());alert('Google account linked')}catch(e){alert('Linking failed: '+e.message)}});
   $('#logout')?.addEventListener('click',()=>signOut(auth));
