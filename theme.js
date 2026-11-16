@@ -18,6 +18,10 @@
     .mba-theme-picker{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
     .mba-theme-picker label{color:var(--mba-headText)}
     .mba-theme-picker select{padding:6px;min-width:140px}
+    .muted{color:color-mix(in srgb,var(--mba-text) 72%,var(--mba-panel))!important}
+.good{color:color-mix(in srgb,#0ab871 72%,var(--mba-text))!important}
+.bad{color:color-mix(in srgb,#ee5166 72%,var(--mba-text))!important}
+.match{border-color:color-mix(in srgb,var(--mba-text) 22%,var(--mba-panel))!important}
     @media print{body{background:white!important;color:black!important}}
   `;
   document.head.appendChild(style);
