@@ -134,3 +134,95 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();
+/* MBA Tournaments: WIN/LOSS colors + live clock. Append to language.js. */
+(() => {
+  if (window.mbaWinClockReady) return;
+  window.mbaWinClockReady = true;
+  const style = document.createElement('style');
+  style.textContent = `
+    .mba-win,.mba-score-win{color:#087c48!important;font-weight:850!important}
+    .mba-loss,.mba-score-loss{color:#c6283d!important;font-weight:750!important}
+    .mba-result-label{display:inline-block;margin-left:7px;padding:2px 6px;border-radius:6px;font-size:11px;font-weight:800;vertical-align:middle}
+    .mba-result-label.win{background:#dcfce7;color:#14532d}
+    .mba-result-label.loss{background:#ffe4e6;color:#9f1239}
+    html[data-match-theme="dark"] .mba-win,html[data-match-theme="dark"] .mba-score-win{color:#70f0af!important}
+    html[data-match-theme="dark"] .mba-loss,html[data-match-theme="dark"] .mba-score-loss{color:#ffa0a9!important}
+    html[data-match-theme="dark"] .mba-result-label.win{background:#155439;color:white}
+    html[data-match-theme="dark"] .mba-result-label.loss{background:#642c3a;color:white}
+    .mba-clock{display:inline-flex;gap:10px;align-items:center;margin-top:12px;padding:8px 12px;border:1px solid #ffffff70;border-radius:9px;color:var(--mba-header-text,#fff)}
+    .mba-clock code{font-size:19px;font-weight:800;color:inherit;font-variant-numeric:tabular-nums}
+    @media print{.mba-clock{display:none!important}.mba-win,.mba-loss,.mba-score-win,.mba-score-loss{color:black!important}}
+  `;
+  document.head.appendChild(style);
+  const ml = () => document.querySelector('#mba-language-select')?.value === 'ml';
+  const scoreRX = /^(\d{1,3})\s*[–—-]\s*(\d{1,3})$/;
+  function paint() {
+    document.querySelectorAll('.match').forEach(card => {
+      const all = [...card.querySelectorAll('b,strong,span,p,div')];
+      const score = all.find(e => (e.matches('b,strong') || !e.childElementCount) && scoreRX.test(e.textContent.trim()));
+      if (!score) return;
+      const m = score.textContent.trim().match(scoreRX);
+      if (!m || m[1] === m[2]) return;
+      const names = [...card.querySelectorAll('b,strong')].filter(e =>
+        e !== score && /\s&\s/.test(e.textContent) && !e.closest('.good,.bad,.mba-result-label')
+      ).slice(0,2);
+      if (names.length < 2 || card.dataset.mbaResultScore === m[0]) return;
+      card.querySelectorAll('.mba-result-label').forEach(e => e.remove());
+      card.querySelectorAll('.mba-win,.mba-loss').forEach(e => e.classList.remove('mba-win','mba-loss'));
+      const winner = Number(m[1]) > Number(m[2]) ? 0 : 1;
+      names.forEach((name, i) => {
+        name.classList.add(i === winner ? 'mba-win' : 'mba-loss');
+        const tag = document.createElement('span');
+        tag.className = 'mba-result-label ' + (i === winner ? 'win' : 'loss');
+        tag.dataset.won = String(i === winner);
+        tag.textContent = ml() ? (i === winner ? 'ജയിച്ചു' : 'തോറ്റു') : (i === winner ? 'WON' : 'LOST');
+        name.appendChild(tag);
+      });
+      function number(v, won) {
+        const s = document.createElement('span');
+        s.className = won ? 'mba-score-win' : 'mba-score-loss';
+        s.textContent = v;
+        return s;
+      }
+      score.replaceChildren(number(m[1], winner === 0), document.createTextNode(' – '), number(m[2], winner === 1));
+      card.dataset.mbaResultScore = m[0];
+    });
+  }
+  function language() {
+    document.querySelectorAll('.mba-result-label').forEach(tag => {
+      const won = tag.dataset.won === 'true';
+      tag.textContent = ml() ? (won ? 'ജയിച്ചു' : 'തോറ്റു') : (won ? 'WON' : 'LOST');
+    });
+    const title = document.getElementById('mba-clock-title');
+    if (title) title.textContent = ml() ? '🕒 സമയം' : '🕒 Time';
+  }
+  function init() {
+    const head = document.querySelector('header');
+    if (!head) return;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'mba-clock noprint';
+    wrapper.innerHTML = '<span id="mba-clock-title"></span><code id="mba-clock-time" aria-live="off">00:00:00</code>';
+    head.appendChild(wrapper);
+    const time = wrapper.querySelector('code');
+    const fmt = new Intl.DateTimeFormat('en-GB', {hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
+    const tick = () => { time.firstChild.nodeValue = fmt.format(new Date()); };
+    language(); tick(); setInterval(tick, 1000);
+    const setTheme = () => {
+      document.documentElement.dataset.matchTheme = document.querySelector('#mbaThemeSelect,#mba-theme')?.value || 'blue';
+    };
+    setTheme();
+    document.querySelector('#mbaThemeSelect,#mba-theme')?.addEventListener('change', setTheme);
+    document.querySelector('#mba-language-select')?.addEventListener('change', language);
+    const content = document.getElementById('content');
+    if (!content) return;
+    let queued = false;
+    new MutationObserver(() => {
+      if (queued) return;
+      queued = true;
+      queueMicrotask(() => { queued = false; paint(); });
+    }).observe(content, {childList:true,subtree:true});
+    paint();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
