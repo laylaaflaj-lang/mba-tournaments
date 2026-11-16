@@ -49,3 +49,90 @@
     init();
   }
 })();
+
+/* MBA Tournaments — Header Alignment Fix */
+(() => {
+  const style = document.createElement('style');
+  style.id = 'mba-header-layout-fix';
+  style.textContent = `
+    header {
+      display: grid !important;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px 12px;
+      align-items: end;
+    }
+
+    header > h1,
+    header > small {
+      grid-column: 1 / -1;
+    }
+
+    header > h1 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    header > h1 img {
+      margin-right: 0 !important;
+    }
+
+    header > .mba-theme-picker {
+      grid-column: 1;
+    }
+
+    header > #mba-language-control {
+      grid-column: 2;
+    }
+
+    header > .mba-theme-picker,
+    header > #mba-language-control {
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: stretch !important;
+      gap: 6px !important;
+      min-width: 0;
+      margin: 0 !important;
+    }
+
+    header .mba-theme-picker label,
+    header #mba-language-label {
+      color: white !important;
+      font-size: 13px;
+      margin: 0 !important;
+    }
+
+    header .mba-theme-picker select,
+    header #mba-language-select {
+      width: 100% !important;
+      min-width: 0 !important;
+      box-sizing: border-box;
+      padding: 8px !important;
+    }
+
+    header > .mba-clock {
+      grid-column: 1 / -1;
+      justify-self: center;
+      margin: 4px 0 0 !important;
+    }
+
+    @media (min-width: 750px) {
+      header {
+        grid-template-columns:
+          minmax(0,1fr) minmax(0,1fr) auto;
+      }
+
+      header > .mba-clock {
+        grid-column: 3;
+        justify-self: end;
+      }
+    }
+
+    @media print {
+      header { display: none !important; }
+    }
+  `;
+  document.head.appendChild(style);
+})();
+
